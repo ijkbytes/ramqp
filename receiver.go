@@ -10,9 +10,12 @@ import (
 type Receiver struct {
 	ExchangeType string
 	ExchangeName string
-	QueueName    string
-	RouteKey     string
-	OnReceive    func(*amqp.Delivery) bool
+	// The QueueName may be empty, in which case the server will
+	// generate a unique name
+	QueueName string
+	RouteKey  string
+	// OnReceive can not be nil, it will be invoke when receive msg
+	OnReceive func(*amqp.Delivery) bool
 
 	channel *amqp.Channel
 
@@ -43,6 +46,15 @@ type Receiver struct {
 	cNoLocal   bool
 	cNoWait    bool
 	cArgs      amqp.Table
+}
+
+func (r *Receiver) init(options []Opt) error {
+	if r.OnReceive == nil {
+		return fmt.Errorf("OnReceive can not be nil")
+	}
+
+	r.dealOptions(options)
+	return nil
 }
 
 func (r *Receiver) dealOptions(options []Opt) {

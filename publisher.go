@@ -34,10 +34,15 @@ type Publisher struct {
 	publishMandatory bool
 }
 
-func (p *Publisher) init(options []POpt) {
+func (p *Publisher) init(options []POpt) error {
 	p.retErr = make(chan error)
 	p.msgChan = make(chan publishing)
 
+	p.dealOptions(options)
+	return nil
+}
+
+func (p *Publisher) dealOptions(options []POpt) {
 	if len(options) < 1 {
 		return
 	}

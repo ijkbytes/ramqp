@@ -25,14 +25,20 @@ func New(url string) *Ramqp {
 	}
 }
 
-func (mq *Ramqp) RegisterReceiver(recv *Receiver, options ...Opt) {
-	recv.dealOptions(options)
+func (mq *Ramqp) RegisterReceiver(recv *Receiver, options ...Opt) error {
+	if err := recv.init(options); err != nil {
+		return err
+	}
 	mq.receivers = append(mq.receivers, recv)
+	return nil
 }
 
-func (mq *Ramqp) RegisterPubliser(pub *Publisher, options ...POpt) {
-	pub.init(options)
+func (mq *Ramqp) RegisterPubliser(pub *Publisher, options ...POpt) error {
+	if err := pub.init(options); err != nil {
+		return err
+	}
 	mq.publishers = append(mq.publishers, pub)
+	return nil
 }
 
 func (mq *Ramqp) refresh() error {
