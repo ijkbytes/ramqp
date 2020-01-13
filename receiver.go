@@ -7,17 +7,14 @@ import (
 	"time"
 )
 
-type Receiver interface {
-	ExchangeType() string
-	ExchangeName() string
-	QueueName() string
-	RouteKey() string
-	OnReceive(*amqp.Delivery) bool
-}
+type Receiver struct {
+	ExchangeType string
+	ExchangeName string
+	QueueName    string
+	RouteKey     string
+	OnReceive    func(*amqp.Delivery) bool
 
-type receiverWrap struct {
-	receiver Receiver
-	channel  *amqp.Channel
+	channel *amqp.Channel
 
 	// queue declare params
 	queueDurable   bool
@@ -25,6 +22,13 @@ type receiverWrap struct {
 	queueExclusive bool
 	queueNoWait    bool
 	queueArgs      amqp.Table
+
+	// exchange declare params
+	exchangeDurable  bool
+	exchangeAutoDel  bool
+	exchangeInternal bool
+	exchangeNoWait   bool
+	exchangeArgs     amqp.Table
 
 	// queue bind params
 	bindNoWait bool
@@ -41,7 +45,7 @@ type receiverWrap struct {
 	cArgs      amqp.Table
 }
 
-func (r *receiverWrap) dealOptions(options []Opt) {
+func (r *Receiver) dealOptions(options []Opt) {
 	if len(options) < 1 {
 		return
 	}
@@ -51,7 +55,7 @@ func (r *receiverWrap) dealOptions(options []Opt) {
 	}
 }
 
-func (r *receiverWrap) createMsgQueue(conn *amqp.Connection) (<-chan amqp.Delivery, error) {
+func (r *Receiver) createMsgQueue(conn *amqp.Connection) (<-chan amqp.Delivery, error) {
 	var err error
 	r.channel, err = conn.Channel()
 	if err != nil {
@@ -59,7 +63,7 @@ func (r *receiverWrap) createMsgQueue(conn *amqp.Connection) (<-chan amqp.Delive
 	}
 
 	_, err = r.channel.QueueDeclare(
-		r.receiver.QueueName(),
+		r.QueueName,
 		r.queueDurable,
 		r.queueAutoDel,
 		r.queueExclusive,
@@ -70,17 +74,30 @@ func (r *receiverWrap) createMsgQueue(conn *amqp.Connection) (<-chan amqp.Delive
 		return nil, fmt.Errorf("queue init err: %v", err)
 	}
 
-	// todo create exchange and bind
+	if len(r.ExchangeName) > 0 && len(r.ExchangeType) > 0 {
+		err = r.channel.ExchangeDeclare(
+			r.ExchangeName,
+			r.ExchangeType,
+			r.exchangeDurable,
+			r.exchangeAutoDel,
+			r.exchangeInternal,
+			r.exchangeNoWait,
+			r.exchangeArgs,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("exchange declare err: %v", err)
+		}
 
-	err = r.channel.QueueBind(
-		r.receiver.QueueName(),
-		r.receiver.RouteKey(),
-		r.receiver.ExchangeName(),
-		r.bindNoWait,
-		r.bindArgs,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("bind queue err: %v", err)
+		err = r.channel.QueueBind(
+			r.QueueName,
+			r.RouteKey,
+			r.ExchangeName,
+			r.bindNoWait,
+			r.bindArgs,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("bind queue err: %v", err)
+		}
 	}
 
 	err = r.channel.Qos(r.prefetchCount, r.prefetchSize, false)
@@ -89,7 +106,7 @@ func (r *receiverWrap) createMsgQueue(conn *amqp.Connection) (<-chan amqp.Delive
 	}
 
 	msgQueue, err := r.channel.Consume(
-		r.receiver.QueueName(),
+		r.QueueName,
 		"",
 		r.cAutoAck,
 		r.cExclusive,
@@ -104,7 +121,7 @@ func (r *receiverWrap) createMsgQueue(conn *amqp.Connection) (<-chan amqp.Delive
 	return msgQueue, nil
 }
 
-func (r *receiverWrap) listen(conn *amqp.Connection) {
+func (r *Receiver) listen(conn *amqp.Connection) {
 	msgQueue, err := r.createMsgQueue(conn)
 	if err != nil {
 		log.Println("create msg queue err: ", err)
@@ -118,7 +135,7 @@ func (r *receiverWrap) listen(conn *amqp.Connection) {
 	r.retry(conn)
 }
 
-func (r *receiverWrap) handleMsg(msgQueue <-chan amqp.Delivery) {
+func (r *Receiver) handleMsg(msgQueue <-chan amqp.Delivery) {
 	closeErr := make(chan *amqp.Error)
 	r.channel.NotifyClose(closeErr)
 
@@ -127,7 +144,7 @@ func (r *receiverWrap) handleMsg(msgQueue <-chan amqp.Delivery) {
 		case msg, valid := <-msgQueue:
 			if valid {
 				go func(msg amqp.Delivery) {
-					if !r.receiver.OnReceive(&msg) {
+					if !r.OnReceive(&msg) {
 						if !r.cAutoAck {
 							log.Println("msg process err, requeue now !!!!!!!!!!")
 							_ = msg.Nack(false, true)
@@ -147,7 +164,7 @@ func (r *receiverWrap) handleMsg(msgQueue <-chan amqp.Delivery) {
 	}
 }
 
-func (r *receiverWrap) retry(conn *amqp.Connection) {
+func (r *Receiver) retry(conn *amqp.Connection) {
 	go func() {
 		if !conn.IsClosed() {
 			time.Sleep(5 * time.Second) // todo exponential backoff

@@ -13,10 +13,9 @@ type Ramqp struct {
 	stop  atomic.Bool
 	stopC chan struct{}
 
-	receivers []*receiverWrap
+	receivers []*Receiver
 
-	// todo publisher
-	//publisher []*publisherWrap
+	publishers []*Publisher
 }
 
 func New(url string) *Ramqp {
@@ -26,17 +25,21 @@ func New(url string) *Ramqp {
 	}
 }
 
-func (mq *Ramqp) RegisterReceiver(recv Receiver, options ...Opt) {
-	r := &receiverWrap{
-		receiver: recv,
-	}
-	r.dealOptions(options)
-	mq.receivers = append(mq.receivers, r)
+func (mq *Ramqp) RegisterReceiver(recv *Receiver, options ...Opt) {
+	recv.dealOptions(options)
+	mq.receivers = append(mq.receivers, recv)
+}
+
+func (mq *Ramqp) RegisterPubliser(pub *Publisher, options ...POpt) {
+	pub.init(options)
+	mq.publishers = append(mq.publishers, pub)
 }
 
 func (mq *Ramqp) refresh() error {
 	var err error
-	mq.conn, err = amqp.Dial(mq.url)
+	if mq.conn == nil || mq.conn.IsClosed() {
+		mq.conn, err = amqp.Dial(mq.url)
+	}
 	if err != nil {
 		log.Println("connection err: ", err)
 		return err
@@ -44,6 +47,10 @@ func (mq *Ramqp) refresh() error {
 
 	for _, recv := range mq.receivers {
 		go recv.listen(mq.conn)
+	}
+
+	for _, pub := range mq.publishers {
+		go pub.listen(mq.conn)
 	}
 
 	closeErr := make(chan *amqp.Error)

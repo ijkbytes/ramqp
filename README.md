@@ -12,38 +12,36 @@ go get -u -v github.com/ijkbytes/ramqp
 下面的例子展示了如何使用Ramqp：
 
 ```go
-type ReceiverA struct {
-}
-
-func (r *ReceiverA) ExchangeType() string {
-	return "topic"
-}
-
-func (r *ReceiverA) ExchangeName() string {
-	return "exchange_name"
-}
-
-func (r *ReceiverA) QueueName() string {
-	return "test_queue"
-}
-
-func (r *ReceiverA) RouteKey() string {
-	return "test_queue"
-}
-
-func (r *ReceiverA) OnReceive(msg *amqp.Delivery) bool {
-	fmt.Println("ReceiverA receive msg: ", string(msg.Body))
-	return true
-}
-
 ...
 
+msg := make(chan string)
+
 mq := ramqp.New("amqp://test:test@127.0.0.1:5672/test")
-// enable auto ack
+receiver := &ramqp.Receiver{
+        ExchangeName: "exchange_name",
+        ExchangeType: "topic",
+        QueueName:    "test_queue",
+        RouteKey:     "test_queue",
+        OnReceive:    func(msg *amqp.Delivery) bool {
+            msg <- string(msg.Body)
+            return true
+        },
+}
+publisher = &rabbitmq.Publisher{}
+
+// register receiver and enable auto ack
 mq.RegisterReceiver(&ReceiverA{}, ramqp.WithConsumeAutoAck())
+// register publisher
+mq.RegisterPubliser(publisher)
 if err := mq.Start(); err != nil {
     panic(err)
 }
+
+publisher.Publish("exchange_name", "test_queue", amqp.Publishing{
+	Body: []byte("this is a test."),
+})
+
+fmt.Println("receive msg: ", <-msg)
 
 ...
 
@@ -55,5 +53,4 @@ if err := mq.Start(); err != nil {
 - [x] 通道异常重连
 - [x] 队列被删除自动重建
 - [x] 实现消费者
-- [ ] 实现实现生产者
-- [ ] ...
+- [x] 实现生产者
