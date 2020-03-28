@@ -4,11 +4,13 @@ import (
 	"github.com/streadway/amqp"
 	"go.uber.org/atomic"
 	"log"
+	"math/rand"
+	"strings"
 	"time"
 )
 
 type Ramqp struct {
-	url   string
+	urls   []string
 	conn  *amqp.Connection
 	stop  atomic.Bool
 	stopC chan struct{}
@@ -18,9 +20,11 @@ type Ramqp struct {
 	publishers []*Publisher
 }
 
-func New(url string) *Ramqp {
+// supports multiple urls, separated by commas. For example:
+// "amqp://guest:guest@10.0.1.21:5672, amqp://guest:guest@10.0.1.22:5672"
+func New(urls string) *Ramqp {
 	return &Ramqp{
-		url:   url,
+		urls:   strings.Split(urls, ","),
 		stopC: make(chan struct{}),
 	}
 }
@@ -41,10 +45,16 @@ func (mq *Ramqp) RegisterPubliser(pub *Publisher, options ...POpt) error {
 	return nil
 }
 
+func (mq *Ramqp) randomUrl() string {
+	rand.Seed(time.Now().UnixNano())
+	i := rand.Int63n(int64(len(mq.urls)))
+	return strings.TrimSpace(mq.urls[i])
+}
+
 func (mq *Ramqp) refresh() error {
 	var err error
 	if mq.conn == nil || mq.conn.IsClosed() {
-		mq.conn, err = amqp.Dial(mq.url)
+		mq.conn, err = amqp.Dial(mq.randomUrl())
 	}
 	if err != nil {
 		log.Println("connection err: ", err)
