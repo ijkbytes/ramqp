@@ -37,7 +37,7 @@ func (mq *Ramqp) RegisterReceiver(recv *Receiver, options ...Opt) error {
 	return nil
 }
 
-func (mq *Ramqp) RegisterPubliser(pub *Publisher, options ...POpt) error {
+func (mq *Ramqp) RegisterPublisher(pub *Publisher, options ...POpt) error {
 	if err := pub.init(options); err != nil {
 		return err
 	}

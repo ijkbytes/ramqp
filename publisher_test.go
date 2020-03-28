@@ -20,7 +20,7 @@ func TestRabbitMQ_Publiser(t *testing.T) {
 			success <- struct{}{}
 		},
 	}
-	mq.RegisterPubliser(publisher, WithPMandatory())
+	mq.RegisterPublisher(publisher, WithPMandatory())
 	if err := mq.Start(); err != nil {
 		t.Fatal(err)
 	}
