@@ -82,6 +82,7 @@ func (p *Publisher) listen(conn *amqp.Connection) {
 	if err != nil {
 		log.Println("create msg queue err: ", err)
 		p.retry(conn)
+		return
 	}
 
 	p.handleMsg()
