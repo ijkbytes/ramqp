@@ -89,5 +89,5 @@ func (mq *Ramqp) Start() error {
 
 func (mq *Ramqp) Stop() {
 	mq.stop.Store(true)
-	mq.stopC <- struct{}{}
+	close(mq.stopC)
 }
